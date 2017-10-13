@@ -1,8 +1,11 @@
 package brats_test
 
 import (
+	"io/ioutil"
+	"os/exec"
 	"path/filepath"
 
+	"github.com/cloudfoundry/libbuildpack"
 	"github.com/cloudfoundry/libbuildpack/cutlass"
 
 	. "github.com/onsi/ginkgo"
@@ -17,7 +20,6 @@ var _ = Describe("Apt supply buildpack", func() {
 		BeforeEach(func() {
 			app = cutlass.New(filepath.Join(bpDir, "fixtures", "simple"))
 			app.Buildpacks = []string{buildpacks.Unbuilt, "binary_buildpack"}
-			app.SetEnv("BP_DEBUG", "1")
 		})
 
 		It("runs", func() {
@@ -29,18 +31,31 @@ var _ = Describe("Apt supply buildpack", func() {
 		})
 	})
 
-	// Context("as a supply buildpack", func() {
-	// 	BeforeEach(func() {
-	// 		app = cutlass.New(filepath.Join(bpDir, "fixtures", "simple"))
-	// 		app.Buildpacks = []string{buildpacks.Cached, "binary_buildpack"}
-	// 		app.SetEnv("BP_DEBUG", "1")
-	// 	})
+	Context("deploying an app with an updated version of the same buildpack", func() {
+		var bpName string
+		BeforeEach(func() {
+			bpName = "brats_apt_changing_" + cutlass.RandStringRunes(6)
 
-	// 	It("supplies apt packages to later buildpacks", func() {
-	// 		PushApp(app)
+			app = cutlass.New(filepath.Join(bpDir, "fixtures", "simple"))
+			app.Buildpacks = []string{bpName + "_buildpack", "binary_buildpack"}
+		})
+		AfterEach(func() {
+			Expect(cutlass.DeleteBuildpack(bpName)).To(Succeed())
+		})
 
-	// 		Expect(app.Stdout.String()).To(ContainSubstring("Installing apt packages"))
-	// 		Expect(app.GetBody("/")).To(ContainSubstring("Ascii: ASCII 6/4 is decimal 100, hex 64"))
-	// 	})
-	// })
+		FIt("prints useful warning message to stdout", func() {
+			Expect(cutlass.CreateOrUpdateBuildpack(bpName, buildpacks.CachedFile)).To(Succeed())
+			PushApp(app)
+			Expect(app.Stdout.String()).ToNot(ContainSubstring("buildpack version changed from"))
+
+			Expect(libbuildpack.CopyFile(buildpacks.CachedFile, filepath.Join("/tmp/buildpack29.zip"))).To(Succeed())
+			Expect(ioutil.WriteFile("/tmp/VERSION", []byte("NewVerson"), 0644)).To(Succeed())
+			Expect(exec.Command("zip", "-d", "/tmp/buildpack29.zip", "VERSION").Run()).To(Succeed())
+			Expect(exec.Command("zip", "-j", "-u", "/tmp/buildpack29.zip", "/tmp/VERSION").Run()).To(Succeed())
+
+			Expect(cutlass.CreateOrUpdateBuildpack(bpName, "/tmp/buildpack29.zip")).To(Succeed())
+			PushApp(app)
+			Expect(app.Stdout.String()).To(ContainSubstring("buildpack version changed from"))
+		})
+	})
 })

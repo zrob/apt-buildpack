@@ -18,8 +18,9 @@ import (
 
 var bpDir string
 var buildpacks struct {
-	Cached  string
-	Unbuilt string
+	Cached     string
+	CachedFile string
+	Unbuilt    string
 }
 
 func init() {
@@ -36,7 +37,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 
 	cachedBuildpack, err := cutlass.PackageUniquelyVersionedBuildpackExtra(buildpacks.Cached, bpVersion, true)
 	Expect(err).NotTo(HaveOccurred())
-	Expect(os.Remove(cachedBuildpack.File)).To(Succeed())
+	buildpacks.CachedFile = cachedBuildpack.File
 
 	bpDir, err := cutlass.FindRoot()
 	Expect(err).NotTo(HaveOccurred())
@@ -73,6 +74,7 @@ var _ = SynchronizedAfterSuite(func() {
 	Expect(cutlass.DeleteOrphanedRoutes()).To(Succeed())
 	Expect(cutlass.DeleteBuildpack(strings.Replace(buildpacks.Cached, "_buildpack", "", 1))).To(Succeed())
 	Expect(cutlass.DeleteBuildpack(strings.Replace(buildpacks.Unbuilt, "_buildpack", "", 1))).To(Succeed())
+	Expect(os.Remove(buildpacks.CachedFile)).To(Succeed())
 })
 
 func TestBrats(t *testing.T) {
