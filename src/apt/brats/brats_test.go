@@ -43,17 +43,18 @@ var _ = Describe("Apt supply buildpack", func() {
 			Expect(cutlass.DeleteBuildpack(bpName)).To(Succeed())
 		})
 
-		FIt("prints useful warning message to stdout", func() {
+		It("prints useful warning message to stdout", func() {
 			Expect(cutlass.CreateOrUpdateBuildpack(bpName, buildpacks.CachedFile)).To(Succeed())
 			PushApp(app)
 			Expect(app.Stdout.String()).ToNot(ContainSubstring("buildpack version changed from"))
 
-			Expect(libbuildpack.CopyFile(buildpacks.CachedFile, filepath.Join("/tmp/buildpack29.zip"))).To(Succeed())
+			newFile := filepath.Join("/tmp", filepath.Base(buildpacks.CachedFile))
+			Expect(libbuildpack.CopyFile(buildpacks.CachedFile, newFile)).To(Succeed())
 			Expect(ioutil.WriteFile("/tmp/VERSION", []byte("NewVerson"), 0644)).To(Succeed())
-			Expect(exec.Command("zip", "-d", "/tmp/buildpack29.zip", "VERSION").Run()).To(Succeed())
-			Expect(exec.Command("zip", "-j", "-u", "/tmp/buildpack29.zip", "/tmp/VERSION").Run()).To(Succeed())
+			Expect(exec.Command("zip", "-d", newFile, "VERSION").Run()).To(Succeed())
+			Expect(exec.Command("zip", "-j", "-u", newFile, "/tmp/VERSION").Run()).To(Succeed())
 
-			Expect(cutlass.CreateOrUpdateBuildpack(bpName, "/tmp/buildpack29.zip")).To(Succeed())
+			Expect(cutlass.CreateOrUpdateBuildpack(bpName, newFile)).To(Succeed())
 			PushApp(app)
 			Expect(app.Stdout.String()).To(ContainSubstring("buildpack version changed from"))
 		})
