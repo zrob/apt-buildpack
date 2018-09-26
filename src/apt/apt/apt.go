@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/cloudfoundry/libbuildpack"
+	"net/http"
+	"io"
 )
 
 type Command interface {
@@ -93,8 +95,12 @@ func (a *Apt) Setup() error {
 		return err
 	}
 
-	if err := libbuildpack.CopyFile("/etc/apt/trusted.gpg", a.trustedKeys); err != nil {
+	if exists, err := libbuildpack.FileExists("/etc/apt/trusted.gpg"); err != nil {
 		return err
+	} else if exists {
+		if err := libbuildpack.CopyFile("/etc/apt/trusted.gpg", a.trustedKeys); err != nil {
+			return err
+		}
 	}
 
 	if exists, err := libbuildpack.FileExists("/etc/apt/preferences"); err != nil {
@@ -182,13 +188,35 @@ func (a *Apt) Download() (string, error) {
 		}
 	}
 
+	archiveDir := filepath.Join(a.cacheDir, "archives")
+	if err := os.MkdirAll(archiveDir, os.ModePerm); err != nil {
+		return "", err
+	}
+
 	// download .deb packages individually
 	for _, pkg := range debPackages {
-		packageFile := filepath.Join(a.cacheDir, "archives", filepath.Base(pkg))
-		args := []string{"-s", "-L", "-z", packageFile, "-o", packageFile, pkg}
-		if output, err := a.command.Output("/", "curl", args...); err != nil {
-			return output, err
+		packageFile, err := os.OpenFile(filepath.Join(archiveDir, filepath.Base(pkg)), os.O_RDWR|os.O_CREATE, os.ModePerm)
+		if err != nil {
+			return "", err
 		}
+
+		resp, err := http.Get(pkg)
+		if err != nil {
+			return "", err
+		}
+
+		if n, err := io.Copy(packageFile, resp.Body); err != nil {
+			resp.Body.Close()
+			packageFile.Close()
+			return "", err
+		} else if n < resp.ContentLength {
+			resp.Body.Close()
+			packageFile.Close()
+			return "", fmt.Errorf("could only write %d bytes of total %d for pkg %s", n, resp.ContentLength, packageFile.Name())
+		}
+
+		resp.Body.Close()
+		packageFile.Close()
 	}
 
 	// download all repo packages in one invocation
