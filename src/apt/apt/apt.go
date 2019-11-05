@@ -219,7 +219,7 @@ func (a *Apt) Clean() error {
 }
 
 func (a *Apt) Update() error {
-	args := append(a.options, "update")
+	args := append(a.options, "update", "--allow-releaseinfo-change")
 
 	var errBuff bytes.Buffer
 	if err := a.command.Execute("/", &errBuff, &errBuff, "apt-get", args...); err != nil {
